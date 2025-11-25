@@ -238,20 +238,53 @@ def upload_file():
     
     except RequestEntityTooLarge:
         return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
-    except Exception as e:
+    except RequestEntityTooLarge:
         # Clean up on error
         if os.path.exists(input_path):
             os.remove(input_path)
+        return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(input_path):
+            try:
+                os.remove(input_path)
+            except:
+                pass
         if os.path.exists(output_path):
-            os.remove(output_path)
+            try:
+                os.remove(output_path)
+            except:
+                pass
         
-        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+        # Log the error for debugging (in production, you'd use proper logging)
+        error_msg = str(e)
+        print(f"Error processing file: {error_msg}")
+        
+        return jsonify({'error': f'Processing failed: {error_msg}'}), 500
 
 
 @app.errorhandler(413)
 def too_large(e):
     """Handle file too large error."""
     return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    """Handle internal server errors with JSON response."""
+    return jsonify({'error': 'Internal server error. Please try again or contact support.'}), 500
+
+
+@app.errorhandler(404)
+def not_found(e):
+    """Handle 404 errors with JSON response."""
+    return jsonify({'error': 'Endpoint not found'}), 404
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Handle all unhandled exceptions with JSON response."""
+    return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
