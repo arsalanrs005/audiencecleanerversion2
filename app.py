@@ -24,7 +24,7 @@ import uuid
 app = Flask(__name__, static_folder='static')
 if CORS_AVAILABLE:
     CORS(app)  # Enable CORS for cross-origin requests
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB max file size
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 app.config['OUTPUT_FOLDER'] = tempfile.gettempdir()
 
@@ -182,7 +182,7 @@ def index():
                 'description': 'Check API health status'
             }
         },
-        'max_file_size': '500MB',
+        'max_file_size': '1GB',
         'note': 'Files are processed using streaming to handle large files efficiently'
     })
 
@@ -237,7 +237,7 @@ def upload_file():
         )
     
     except RequestEntityTooLarge:
-        return jsonify({'error': 'File too large. Maximum size is 500MB'}), 413
+        return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
     except Exception as e:
         # Clean up on error
         if os.path.exists(input_path):
@@ -251,7 +251,7 @@ def upload_file():
 @app.errorhandler(413)
 def too_large(e):
     """Handle file too large error."""
-    return jsonify({'error': 'File too large. Maximum size is 500MB'}), 413
+    return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
 
 
 if __name__ == '__main__':
@@ -263,7 +263,7 @@ if __name__ == '__main__':
     print(f"🚀 Audience Cleaner API starting on port {port}")
     print(f"📁 Upload folder: {app.config['UPLOAD_FOLDER']}")
     print(f"📁 Output folder: {app.config['OUTPUT_FOLDER']}")
-    print(f"💾 Max file size: 500MB")
+    print(f"💾 Max file size: 1GB")
     print(f"\nAPI Documentation: http://localhost:{port}/")
     print(f"Health check: http://localhost:{port}/health")
     print(f"Upload endpoint: http://localhost:{port}/upload")
