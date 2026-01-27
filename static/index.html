@@ -148,6 +148,102 @@
             border-radius: 6px;
             font-weight: 600;
         }
+        .filename-input-group {
+            margin-bottom: 20px;
+        }
+        .filename-input-group label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+        .filename-input-group input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+        .filename-input-group input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .filename-input-group .hint {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .preview-container {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+        }
+        .preview-container.active {
+            display: block;
+        }
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .preview-header h3 {
+            color: #333;
+            font-size: 1.2em;
+            margin: 0;
+        }
+        .preview-stats {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .preview-table-wrapper {
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        .preview-table th {
+            background: #667eea;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .preview-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .preview-table tr:hover {
+            background: #f5f5f5;
+        }
+        .preview-table tr:last-child td {
+            border-bottom: none;
+        }
+        .preview-note {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: #1565c0;
+        }
     </style>
 </head>
 <body>
@@ -164,6 +260,12 @@
                 <div class="file-name" id="fileName"></div>
             </div>
             
+            <div class="filename-input-group">
+                <label for="filenameInput">Output Filename (optional)</label>
+                <input type="text" id="filenameInput" placeholder="Enter custom filename (without .csv extension)">
+                <div class="hint">Leave empty to use default: cleaned_[original_filename].csv</div>
+            </div>
+            
             <button type="submit" id="submitBtn">Process File</button>
         </form>
         
@@ -175,21 +277,44 @@
         </div>
         
         <div class="result" id="result"></div>
+        
+        <div class="preview-container" id="previewContainer">
+            <div class="preview-header">
+                <h3>📊 Data Preview</h3>
+                <div class="preview-stats" id="previewStats"></div>
+            </div>
+            <div class="preview-table-wrapper">
+                <table class="preview-table" id="previewTable">
+                    <thead id="previewTableHead"></thead>
+                    <tbody id="previewTableBody"></tbody>
+                </table>
+            </div>
+            <div class="preview-note">
+                Showing first 10 rows. Download the full file to see all data.
+            </div>
+        </div>
     </div>
 
     <script>
         const form = document.getElementById('uploadForm');
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
+        const filenameInput = document.getElementById('filenameInput');
         const submitBtn = document.getElementById('submitBtn');
         const progress = document.getElementById('progress');
         const result = document.getElementById('result');
         const uploadArea = document.getElementById('uploadArea');
+        const previewContainer = document.getElementById('previewContainer');
+        const previewTableHead = document.getElementById('previewTableHead');
+        const previewTableBody = document.getElementById('previewTableBody');
+        const previewStats = document.getElementById('previewStats');
 
         // File input change
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 fileName.textContent = `Selected: ${e.target.files[0].name}`;
+                // Hide previous preview
+                previewContainer.classList.remove('active');
             }
         });
 
@@ -209,6 +334,8 @@
             if (e.dataTransfer.files.length > 0) {
                 fileInput.files = e.dataTransfer.files;
                 fileName.textContent = `Selected: ${e.dataTransfer.files[0].name}`;
+                // Hide previous preview
+                previewContainer.classList.remove('active');
             }
         });
 
@@ -230,6 +357,8 @@
             progress.classList.add('active');
             result.className = 'result';
             result.textContent = '';
+            // Hide previous preview
+            previewContainer.classList.remove('active');
 
             try {
                 const response = await fetch('/upload', {
@@ -238,31 +367,102 @@
                 });
 
                 if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `cleaned_${file.name}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Get custom filename or use default
+                        let downloadFilename;
+                        const customFilename = filenameInput.value.trim();
+                        if (customFilename) {
+                            // Remove .csv extension if user added it, then add it back
+                            downloadFilename = customFilename.replace(/\.csv$/i, '') + '.csv';
+                        } else {
+                            downloadFilename = data.filename;
+                        }
+                        
+                        // Decode base64 file data
+                        const binaryString = atob(data.file_data);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        const blob = new Blob([bytes], { type: 'text/csv' });
+                        const url = window.URL.createObjectURL(blob);
+                        
+                        // Trigger download
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = downloadFilename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
 
-                    result.className = 'result success';
-                    result.innerHTML = '✅ File processed successfully!<br><a href="' + url + '" download="cleaned_' + file.name + '" class="download-link">Download Cleaned File</a>';
+                        // Display preview
+                        displayPreview(data.preview, data.columns, data.rows_processed);
+                        
+                        result.className = 'result success';
+                        result.innerHTML = `✅ File processed successfully! ${data.rows_processed.toLocaleString()} rows processed.<br><a href="${url}" download="${downloadFilename}" class="download-link" onclick="window.URL.revokeObjectURL('${url}')">Download Cleaned File</a>`;
+                    } else {
+                        result.className = 'result error';
+                        result.textContent = `❌ Error: ${data.error || 'Processing failed'}`;
+                    }
                 } else {
                     const error = await response.json();
                     result.className = 'result error';
                     result.textContent = `❌ Error: ${error.error || 'Processing failed'}`;
+                    previewContainer.classList.remove('active');
                 }
             } catch (error) {
                 result.className = 'result error';
                 result.textContent = `❌ Error: ${error.message}`;
+                previewContainer.classList.remove('active');
             } finally {
                 submitBtn.disabled = false;
                 progress.classList.remove('active');
             }
         });
+
+        function displayPreview(previewData, columns, totalRows) {
+            // Clear previous preview
+            previewTableHead.innerHTML = '';
+            previewTableBody.innerHTML = '';
+            
+            // Show preview container
+            previewContainer.classList.add('active');
+            
+            // Update stats
+            previewStats.textContent = `Showing ${previewData.length} of ${totalRows.toLocaleString()} rows`;
+            
+            // Create header row
+            const headerRow = document.createElement('tr');
+            columns.forEach(col => {
+                const th = document.createElement('th');
+                th.textContent = col;
+                headerRow.appendChild(th);
+            });
+            previewTableHead.appendChild(headerRow);
+            
+            // Create data rows
+            previewData.forEach(row => {
+                const tr = document.createElement('tr');
+                columns.forEach(col => {
+                    const td = document.createElement('td');
+                    const value = row[col] || '';
+                    // Truncate long values for better display
+                    if (value.length > 50) {
+                        td.textContent = value.substring(0, 47) + '...';
+                        td.title = value; // Show full value on hover
+                    } else {
+                        td.textContent = value;
+                    }
+                    tr.appendChild(td);
+                });
+                previewTableBody.appendChild(tr);
+            });
+            
+            // Scroll to preview
+            previewContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
     </script>
 </body>
 </html>

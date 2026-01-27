@@ -105,7 +105,8 @@ def process_csv(input_file, output_file):
         'FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL',
         'Personal_Phone', 'Mobile_Phone', 'Valid_Phone', 'UUID',
         'PERSONAL_CITY', 'PERSONAL_STATE', 'AGE_RANGE', 'CHILDREN',
-        'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE'
+        'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE',
+        'LINKEDIN_URL'
     ]
     
     rows_processed = 0
@@ -139,6 +140,13 @@ def process_csv(input_file, output_file):
                     net_worth = clean_income_range(row.get('NET_WORTH', ''))
                     income_range = clean_income_range(row.get('INCOME_RANGE', ''))
                     
+                    # Get LinkedIn URL (try common column name variations)
+                    linkedin_url = (row.get('LINKEDIN_URL', '') or 
+                                   row.get('LinkedIn_URL', '') or 
+                                   row.get('LINKEDIN', '') or 
+                                   row.get('LinkedIn', '') or 
+                                   row.get('linkedin_url', '') or '').strip()
+                    
                     # Build output row
                     output_row = {
                         'FIRST_NAME': row.get('FIRST_NAME', ''),
@@ -157,7 +165,8 @@ def process_csv(input_file, output_file):
                         'HOMEOWNER': row.get('HOMEOWNER', ''),
                         'MARRIED': row.get('MARRIED', ''),
                         'NET_WORTH': net_worth,
-                        'INCOME_RANGE': income_range
+                        'INCOME_RANGE': income_range,
+                        'LINKEDIN_URL': linkedin_url
                     }
                     
                     writer.writerow(output_row)

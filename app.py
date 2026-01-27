@@ -8,6 +8,7 @@ import os
 import csv
 import re
 import tempfile
+import base64
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, send_from_directory
 
@@ -91,16 +92,19 @@ def get_primary_email(row):
     return ''
 
 
-def process_csv_streaming(input_path, output_path):
-    """Process CSV file using streaming to handle large files."""
+def process_csv_streaming(input_path, output_path, preview_rows=10):
+    """Process CSV file using streaming to handle large files.
+    Returns (rows_processed, preview_data) where preview_data is a list of dicts."""
     output_columns = [
         'FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL',
         'Personal_Phone', 'Mobile_Phone', 'Valid_Phone', 'UUID',
         'PERSONAL_CITY', 'PERSONAL_STATE', 'AGE_RANGE', 'CHILDREN',
-        'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE'
+        'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE',
+        'LINKEDIN_URL'
     ]
     
     rows_processed = 0
+    preview_data = []
     
     try:
         with open(input_path, 'r', encoding='utf-8', errors='replace') as infile:
@@ -131,6 +135,13 @@ def process_csv_streaming(input_path, output_path):
                     net_worth = clean_income_range(row.get('NET_WORTH', ''))
                     income_range = clean_income_range(row.get('INCOME_RANGE', ''))
                     
+                    # Get LinkedIn URL (try common column name variations)
+                    linkedin_url = (row.get('LINKEDIN_URL', '') or 
+                                   row.get('LinkedIn_URL', '') or 
+                                   row.get('LINKEDIN', '') or 
+                                   row.get('LinkedIn', '') or 
+                                   row.get('linkedin_url', '') or '').strip()
+                    
                     # Build output row
                     output_row = {
                         'FIRST_NAME': row.get('FIRST_NAME', ''),
@@ -149,13 +160,18 @@ def process_csv_streaming(input_path, output_path):
                         'HOMEOWNER': row.get('HOMEOWNER', ''),
                         'MARRIED': row.get('MARRIED', ''),
                         'NET_WORTH': net_worth,
-                        'INCOME_RANGE': income_range
+                        'INCOME_RANGE': income_range,
+                        'LINKEDIN_URL': linkedin_url
                     }
                     
                     writer.writerow(output_row)
                     rows_processed += 1
+                    
+                    # Collect preview data (first N rows)
+                    if len(preview_data) < preview_rows:
+                        preview_data.append(output_row)
         
-        return rows_processed
+        return rows_processed, preview_data
     
     except Exception as e:
         raise Exception(f"Error processing file: {str(e)}")
@@ -228,18 +244,37 @@ def upload_file():
         file.save(input_path)
         
         # Process the file (streaming, memory-efficient)
-        rows_processed = process_csv_streaming(input_path, output_path)
+        rows_processed, preview_data = process_csv_streaming(input_path, output_path)
         
-        # Clean up input file
+        # Read the processed file for download
+        with open(output_path, 'rb') as f:
+            file_content = f.read()
+        
+        # Encode file as base64 for JSON response
+        file_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        # Clean up files
         os.remove(input_path)
+        try:
+            os.remove(output_path)
+        except:
+            pass  # File might already be removed or in use
         
-        # Return the processed file
-        return send_file(
-            output_path,
-            as_attachment=True,
-            download_name=f"cleaned_{file.filename}",
-            mimetype='text/csv'
-        )
+        # Return JSON with preview data and file
+        return jsonify({
+            'success': True,
+            'rows_processed': rows_processed,
+            'preview': preview_data,
+            'columns': [
+                'FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL',
+                'Personal_Phone', 'Mobile_Phone', 'Valid_Phone', 'UUID',
+                'PERSONAL_CITY', 'PERSONAL_STATE', 'AGE_RANGE', 'CHILDREN',
+                'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE',
+                'LINKEDIN_URL'
+            ],
+            'file_data': file_base64,
+            'filename': f"cleaned_{file.filename}"
+        })
     
     except RequestEntityTooLarge:
         return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
