@@ -273,15 +273,24 @@ def download_file(file_id):
 def upload_file():
     """Handle file upload and processing."""
     if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
+        return jsonify({
+            'success': False,
+            'error': 'No file provided'
+        }), 400
     
     file = request.files['file']
     
     if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+        return jsonify({
+            'success': False,
+            'error': 'No file selected'
+        }), 400
     
     if not file.filename.lower().endswith('.csv'):
-        return jsonify({'error': 'File must be a CSV file'}), 400
+        return jsonify({
+            'success': False,
+            'error': 'File must be a CSV file'
+        }), 400
     
     # Generate unique filenames
     file_id = str(uuid.uuid4())
@@ -355,12 +364,16 @@ def upload_file():
             })
     
     except RequestEntityTooLarge:
-        return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
-    except RequestEntityTooLarge:
         # Clean up on error
         if os.path.exists(input_path):
-            os.remove(input_path)
-        return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
+            try:
+                os.remove(input_path)
+            except:
+                pass
+        return jsonify({
+            'success': False,
+            'error': 'File too large. Maximum size is 1GB'
+        }), 413
     except Exception as e:
         # Clean up on error
         if os.path.exists(input_path):
@@ -376,9 +389,19 @@ def upload_file():
         
         # Log the error for debugging (in production, you'd use proper logging)
         error_msg = str(e)
+        import traceback
         print(f"Error processing file: {error_msg}")
+        print(traceback.format_exc())
         
-        return jsonify({'error': f'Processing failed: {error_msg}'}), 500
+        # Always return JSON, even on errors
+        try:
+            return jsonify({
+                'success': False,
+                'error': f'Processing failed: {error_msg}'
+            }), 500
+        except Exception as json_error:
+            # Fallback if jsonify fails
+            return f'{{"success": false, "error": "Processing failed: {error_msg}"}}', 500, {'Content-Type': 'application/json'}
 
 
 @app.errorhandler(413)

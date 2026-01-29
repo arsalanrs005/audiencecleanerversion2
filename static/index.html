@@ -366,8 +366,27 @@
                     body: formData
                 });
 
+                // Check content type before parsing JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    // Response is not JSON - might be an error page or file
+                    const text = await response.text();
+                    result.className = 'result error';
+                    result.textContent = `❌ Error: Server returned non-JSON response. Status: ${response.status}. ${text.substring(0, 200)}`;
+                    previewContainer.classList.remove('active');
+                    return;
+                }
+
                 if (response.ok) {
-                    const data = await response.json();
+                    let data;
+                    try {
+                        data = await response.json();
+                    } catch (jsonError) {
+                        result.className = 'result error';
+                        result.textContent = `❌ Error: Failed to parse JSON response. The server may have returned an error. Status: ${response.status}`;
+                        previewContainer.classList.remove('active');
+                        return;
+                    }
                     
                     if (data.success) {
                         // Get custom filename or use default
@@ -426,9 +445,22 @@
                         result.textContent = `❌ Error: ${data.error || 'Processing failed'}`;
                     }
                 } else {
-                    const error = await response.json();
+                    // Response not OK - try to get error message
+                    let errorMessage = `Processing failed (Status: ${response.status})`;
+                    try {
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            const error = await response.json();
+                            errorMessage = error.error || error.message || errorMessage;
+                        } else {
+                            const text = await response.text();
+                            errorMessage = text.substring(0, 200) || errorMessage;
+                        }
+                    } catch (e) {
+                        // If we can't parse the error, use default message
+                    }
                     result.className = 'result error';
-                    result.textContent = `❌ Error: ${error.error || 'Processing failed'}`;
+                    result.textContent = `❌ Error: ${errorMessage}`;
                     previewContainer.classList.remove('active');
                 }
             } catch (error) {
