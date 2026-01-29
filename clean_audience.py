@@ -8,6 +8,7 @@ Handles files of any size by processing in chunks.
 import csv
 import re
 import sys
+import hashlib
 from pathlib import Path
 
 
@@ -93,6 +94,19 @@ def get_primary_email(row):
     
     return ''
 
+def generate_sha256(row, primary_email, primary_phone):
+    """Generate SHA256 hash from key identifying fields."""
+    # Combine key fields for hashing
+    hash_string = '|'.join([
+        str(row.get('FIRST_NAME', '')),
+        str(row.get('LAST_NAME', '')),
+        str(primary_email),
+        str(primary_phone),
+        str(row.get('UUID', ''))
+    ])
+    # Generate SHA256 hash
+    return hashlib.sha256(hash_string.encode('utf-8')).hexdigest()
+
 
 def process_csv(input_file, output_file):
     """Process the CSV file and create cleaned output."""
@@ -106,7 +120,7 @@ def process_csv(input_file, output_file):
         'Personal_Phone', 'Mobile_Phone', 'Valid_Phone', 'UUID',
         'PERSONAL_CITY', 'PERSONAL_STATE', 'AGE_RANGE', 'CHILDREN',
         'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE',
-        'LINKEDIN_URL'
+        'LINKEDIN_URL', 'SHA256'
     ]
     
     rows_processed = 0
@@ -147,6 +161,9 @@ def process_csv(input_file, output_file):
                                    row.get('LinkedIn', '') or 
                                    row.get('linkedin_url', '') or '').strip()
                     
+                    # Generate SHA256 hash
+                    sha256_hash = generate_sha256(row, primary_email, primary_phone)
+                    
                     # Build output row
                     output_row = {
                         'FIRST_NAME': row.get('FIRST_NAME', ''),
@@ -166,7 +183,8 @@ def process_csv(input_file, output_file):
                         'MARRIED': row.get('MARRIED', ''),
                         'NET_WORTH': net_worth,
                         'INCOME_RANGE': income_range,
-                        'LINKEDIN_URL': linkedin_url
+                        'LINKEDIN_URL': linkedin_url,
+                        'SHA256': sha256_hash
                     }
                     
                     writer.writerow(output_row)
