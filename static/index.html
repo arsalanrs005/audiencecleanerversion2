@@ -380,28 +380,47 @@
                             downloadFilename = data.filename;
                         }
                         
-                        // Decode base64 file data
-                        const binaryString = atob(data.file_data);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        const blob = new Blob([bytes], { type: 'text/csv' });
-                        const url = window.URL.createObjectURL(blob);
-                        
-                        // Trigger download
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = downloadFilename;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-
                         // Display preview
                         displayPreview(data.preview, data.columns, data.rows_processed);
                         
-                        result.className = 'result success';
-                        result.innerHTML = `✅ File processed successfully! ${data.rows_processed.toLocaleString()} rows processed.<br><a href="${url}" download="${downloadFilename}" class="download-link" onclick="window.URL.revokeObjectURL('${url}')">Download Cleaned File</a>`;
+                        // Handle file download - check if large file (download_url) or small file (file_data)
+                        if (data.download_url) {
+                            // Large file - use download endpoint
+                            const downloadUrl = `${data.download_url}?filename=${encodeURIComponent(downloadFilename)}`;
+                            result.className = 'result success';
+                            result.innerHTML = `✅ File processed successfully! ${data.rows_processed.toLocaleString()} rows processed.<br><a href="${downloadUrl}" class="download-link" target="_blank">Download Cleaned File (${(data.file_size / 1024 / 1024).toFixed(2)} MB)</a>`;
+                            
+                            // Auto-trigger download
+                            const a = document.createElement('a');
+                            a.href = downloadUrl;
+                            a.download = downloadFilename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                        } else if (data.file_data) {
+                            // Small file - use base64 data
+                            const binaryString = atob(data.file_data);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) {
+                                bytes[i] = binaryString.charCodeAt(i);
+                            }
+                            const blob = new Blob([bytes], { type: 'text/csv' });
+                            const url = window.URL.createObjectURL(blob);
+                            
+                            // Trigger download
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = downloadFilename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            
+                            result.className = 'result success';
+                            result.innerHTML = `✅ File processed successfully! ${data.rows_processed.toLocaleString()} rows processed.<br><a href="${url}" download="${downloadFilename}" class="download-link" onclick="window.URL.revokeObjectURL('${url}')">Download Cleaned File</a>`;
+                        } else {
+                            result.className = 'result error';
+                            result.textContent = '❌ Error: No file data received';
+                        }
                     } else {
                         result.className = 'result error';
                         result.textContent = `❌ Error: ${data.error || 'Processing failed'}`;

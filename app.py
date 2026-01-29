@@ -235,6 +235,40 @@ def health():
     })
 
 
+@app.route('/download/<file_id>', methods=['GET'])
+def download_file(file_id):
+    """Download processed file by file_id. Used for large files."""
+    output_filename = secure_filename(f"{file_id}_cleaned.csv")
+    output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+    
+    if not os.path.exists(output_path):
+        return jsonify({'error': 'File not found or expired'}), 404
+    
+    try:
+        # Get original filename from request if provided
+        download_name = request.args.get('filename', f"cleaned_{file_id}.csv")
+        
+        # Send file and clean up after sending
+        return send_file(
+            output_path,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='text/csv'
+        )
+    finally:
+        # Clean up file after sending (with delay to ensure download started)
+        import threading
+        def cleanup():
+            import time
+            time.sleep(60)  # Wait 60 seconds before cleanup
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except:
+                pass
+        threading.Thread(target=cleanup, daemon=True).start()
+
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     """Handle file upload and processing."""
@@ -264,35 +298,61 @@ def upload_file():
         # Process the file (streaming, memory-efficient)
         rows_processed, preview_data = process_csv_streaming(input_path, output_path)
         
-        # Read the processed file for download
-        with open(output_path, 'rb') as f:
-            file_content = f.read()
-        
-        # Encode file as base64 for JSON response
-        file_base64 = base64.b64encode(file_content).decode('utf-8')
-        
-        # Clean up files
+        # Clean up input file
         os.remove(input_path)
-        try:
-            os.remove(output_path)
-        except:
-            pass  # File might already be removed or in use
         
-        # Return JSON with preview data and file
-        return jsonify({
-            'success': True,
-            'rows_processed': rows_processed,
-            'preview': preview_data,
-            'columns': [
-                'FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL',
-                'Personal_Phone', 'Mobile_Phone', 'Valid_Phone', 'UUID',
-                'PERSONAL_CITY', 'PERSONAL_STATE', 'AGE_RANGE', 'CHILDREN',
-                'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE',
-                'LINKEDIN_URL', 'SHA256'
-            ],
-            'file_data': file_base64,
-            'filename': f"cleaned_{file.filename}"
-        })
+        # Check file size - for large files, use download endpoint instead of base64
+        file_size = os.path.getsize(output_path)
+        max_base64_size = 10 * 1024 * 1024  # 10MB limit for base64 encoding
+        
+        if file_size > max_base64_size:
+            # For large files, return file_id and use download endpoint
+            # Keep output file for download endpoint (will be cleaned up later)
+            return jsonify({
+                'success': True,
+                'rows_processed': rows_processed,
+                'preview': preview_data,
+                'columns': [
+                    'FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL',
+                    'Personal_Phone', 'Mobile_Phone', 'Valid_Phone', 'UUID',
+                    'PERSONAL_CITY', 'PERSONAL_STATE', 'AGE_RANGE', 'CHILDREN',
+                    'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE',
+                    'LINKEDIN_URL', 'SHA256'
+                ],
+                'file_id': file_id,
+                'filename': f"cleaned_{file.filename}",
+                'file_size': file_size,
+                'download_url': f'/download/{file_id}'
+            })
+        else:
+            # For smaller files, use base64 encoding (existing behavior)
+            with open(output_path, 'rb') as f:
+                file_content = f.read()
+            
+            # Encode file as base64 for JSON response
+            file_base64 = base64.b64encode(file_content).decode('utf-8')
+            
+            # Clean up output file
+            try:
+                os.remove(output_path)
+            except:
+                pass
+            
+            # Return JSON with preview data and file
+            return jsonify({
+                'success': True,
+                'rows_processed': rows_processed,
+                'preview': preview_data,
+                'columns': [
+                    'FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL',
+                    'Personal_Phone', 'Mobile_Phone', 'Valid_Phone', 'UUID',
+                    'PERSONAL_CITY', 'PERSONAL_STATE', 'AGE_RANGE', 'CHILDREN',
+                    'GENDER', 'HOMEOWNER', 'MARRIED', 'NET_WORTH', 'INCOME_RANGE',
+                    'LINKEDIN_URL', 'SHA256'
+                ],
+                'file_data': file_base64,
+                'filename': f"cleaned_{file.filename}"
+            })
     
     except RequestEntityTooLarge:
         return jsonify({'error': 'File too large. Maximum size is 1GB'}), 413
