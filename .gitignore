@@ -25,6 +25,9 @@ venv/
 env/
 ENV/
 
+# Local credentials (never commit)
+/env
+
 # IDE
 .vscode/
 .idea/
