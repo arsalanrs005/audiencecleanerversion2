@@ -8,9 +8,10 @@ COPY requirements_web.txt .
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements_web.txt
 
-# Copy application files
+# Copy application files (static/ required for the web UI at /)
 COPY app.py .
 COPY clean_audience.py .
+COPY static ./static
 
 # Create directories for temp files
 RUN mkdir -p /tmp/uploads /tmp/outputs

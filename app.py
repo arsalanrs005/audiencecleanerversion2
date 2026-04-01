@@ -198,10 +198,13 @@ def process_csv_streaming(input_path, output_path, preview_rows=10):
 @app.route('/')
 def index():
     """Serve web interface or API documentation."""
-    # Try to serve HTML interface if it exists
-    html_path = os.path.join(os.path.dirname(__file__), 'static', 'index.html')
-    if os.path.exists(html_path):
-        return send_from_directory(os.path.dirname(html_path), 'index.html')
+    # Resolve static dir (works with gunicorn, Docker, and varying cwd)
+    static_dir = app.static_folder
+    if static_dir and not os.path.isabs(static_dir):
+        static_dir = os.path.join(app.root_path, static_dir)
+    html_path = os.path.join(static_dir, 'index.html') if static_dir else ''
+    if html_path and os.path.exists(html_path):
+        return send_from_directory(static_dir, 'index.html')
     
     # Otherwise return API documentation
     return jsonify({
